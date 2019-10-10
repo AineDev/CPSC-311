@@ -1,0 +1,604 @@
+#lang plai
+
+;;; Taming the test infrastructure
+;;; Here we introduce some code that will let us guarantee
+;;; that your tests don't go bonkers.
+;;; 
+;;; You don't need to know how this works yet, but we'll revisit the
+;;; implementation of this test/timeout helper later in the term!
+(require racket/sandbox)
+
+;; test/timeout works like test, but fails if actual running
+;; takes more than 5 seconds or more than 256mb of memory
+
+(define-syntax-rule (test/timeout actual expected)
+  (test (with-limits 5 256 actual) expected))
+
+;; A3L : the Assignment 3 Language
+
+;; Syntax specification:
+;;
+;; <A3L> ::= <num>
+;;          | <boolean>
+;;          | <id>
+;;          | {+ <A3L> <A3L>}
+;;          | {- <A3L> <A3L>}
+;;          | {* <A3L> <A3L>}
+;;          | {< <A3L> <A3L>}
+;;          | {= <A3L> <A3L>}
+;;          | {with {<id> <A3L>} <A3L>}
+;;          | {lazy-with {<id> <A3L>} <A3L>}
+;;          | {fun {<id>} <A3L>}
+;;          | {byname-fun {<id>} <A3L>}
+;;          | {<A3L> <A3L>}
+;;          | {ifb <A3L> <A3L> <A3L>}
+;;          | {whileb <A3L> <A3L>}
+;;          | {begin <A3L> <A3Ls>}
+;;          | {setvar! <id> <A3L>}
+
+;; <A3Ls> ::=
+;;        | <A3L> <A3Ls>
+
+;; Semantics of note:
+;; - begin: evaluates its expressions in order from left to right,
+;;          discarding the result of all but the last one.
+;;          Intermediate steps must be evaluated in order to
+;;          keep proper track of mutation side effects.
+;;
+;; - setvar!: evaluates the expression to v and sets the value of the
+;;         variable to v.
+;;
+;; - byname-fun creates a function that, when applied, does not evaluate its argument
+;;              BEFORE calling, but will evaluate the argument expression every time
+;;              the parameter is used in the body of the function.
+
+;;
+;; - lazy-with behaves almost like in Assignment 2, but now it always
+;;             enforces static scoping.  Lazy-with now works by desugaring into applications of byname-fun
+;;    (we do this for you)
+
+
+;; In this assignment, we are make desugaring an explicit step.  So, here's the
+;; "surface" or "sugared" language that our end-user programmers program in.
+;; You shouldn't need to deal with this much at all.
+
+(define-type S-A3L
+  [s-num (n number?)]
+  [s-bool (n boolean?)]
+  [s-id (name symbol?)]
+  [s-add (lhs S-A3L?) (rhs S-A3L?)]
+  [s-sub (lhs S-A3L?) (rhs S-A3L?)]
+  [s-mult (lhs S-A3L?) (rhs S-A3L?)]
+  [s-< (lhs S-A3L?) (rhs S-A3L?)]
+  [s-= (lhs S-A3L?) (rhs S-A3L?)]
+  [s-with (name symbol?) (named-exp S-A3L?) (body S-A3L?)]
+  [s-lazy-with (name symbol?) (named-exp S-A3L?) (body S-A3L?)]
+  [s-fun (arg-name symbol?) (body S-A3L?)]
+  [s-byname-fun (arg-name symbol?) (body S-A3L?)]
+  [s-app (fun-exp S-A3L?) (arg-exp S-A3L?)]
+  [s-ifb (test-exp S-A3L?) (then-exp S-A3L?) (else-exp S-A3L?)]
+  [s-whileb (test-exp S-A3L?) (body-exp S-A3L?)]
+  [s-begin  (exprs (non-empty-listof S-A3L?)) ]
+  [s-setvar! (var symbol?) (val-expr S-A3L?)]
+  )
+
+;; And here's the language our interpreter will understand.  Note that it
+;; lacks "with", "lazy-with" AND "begin".  "A3L" is for "desugared S-A3L":
+(define-type  A3L
+  [num (n number?)]
+  [bool (b boolean?)]
+  [id (name symbol?)]
+  ;; op : number * number -> X
+  ;; value-constructor : X -> A3L? 
+  [binop (op procedure?) (value-constructor procedure?) (lhs  A3L?) (rhs  A3L?)]
+  [fun (arg-name symbol?) (body  A3L?)]
+  [byname-fun (arg-name symbol?) (body  A3L?)]
+  [app (fun-exp  A3L?) (arg-exp  A3L?)]
+  [ifb (test-exp  A3L?) (then-exp  A3L?) (else-exp  A3L?)]
+  [whileb (test-exp  A3L?) (body-exp  A3L?)]
+  [setvar! (var symbol?) (val-expr  A3L?)]
+  )
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; PARSING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(define *reserved-symbols* '(+ - * with lazy-with fun byname-fun ifb begin setvar! true false #t #f))
+
+;; valid-identifier? : any -> boolean
+;; Determines whether the parameter is valid as an identifier name, i.e.,
+;; a symbol that is not reserved.
+(define (valid-identifier? sym)
+  (and (symbol? sym)
+       (not (member sym *reserved-symbols*))))
+
+;;We do some trickery to allow using true and false in our concrete syntax
+;; in addition to #t and #f
+(define (valid-boolean? sym)
+  (if (member sym '(true false)) true false))
+
+;; parse : any -> S-A3L
+;; Consumes an s-expression (in our concrete "surface" syntax) and
+;; generates the corresponding S-A3L AST.
+(define (parse sexp)
+  (match sexp
+    [(? valid-identifier?) (s-id sexp)]
+    [(? number?) (s-num sexp)]
+    [(? boolean?) (s-bool sexp)]
+    [(? valid-boolean?) (s-bool (equal? sexp 'true))]
+    [(list '+ lexp rexp) (s-add (parse lexp) (parse rexp))]
+    [(list '- lexp rexp) (s-sub (parse lexp) (parse rexp))]
+    [(list '* lexp rexp) (s-mult (parse lexp) (parse rexp))]
+    [(list '< lexp rexp) (s-< (parse lexp) (parse rexp))]
+    [(list '= lexp rexp) (s-= (parse lexp) (parse rexp))]
+    [(list 'with (list (and (? valid-identifier?) id) binding-expr) body-expr)
+     (s-with id (parse binding-expr) (parse body-expr))]
+    [(list 'lazy-with (list (and (? valid-identifier?) id) binding-expr) body-expr)
+     (s-lazy-with id (parse binding-expr) (parse body-expr))]
+    [(list 'fun (list (and (? valid-identifier?) id)) body-expr)
+     (s-fun id (parse body-expr))]
+    [(list 'byname-fun (list (and (? valid-identifier?) id)) body-expr)
+     (s-byname-fun id (parse body-expr))]
+    [(list 'ifb c-expr t-expr e-expr)
+     (s-ifb (parse c-expr) (parse t-expr) (parse e-expr))]
+    [(list 'whileb c-expr b-expr )
+     (s-whileb (parse c-expr) (parse b-expr))]
+    [(cons 'begin exprs) (s-begin (if (null? exprs) (error "parse: need at least one expr in begin") (map parse exprs)))]
+    [(list 'setvar! (? valid-identifier? id) expr) (s-setvar! id (parse expr))]
+    ;; Don't parse (<reserved> <expr>) as a function application.
+    [(list (and f-expr (? (lambda (s) (not (member s *reserved-symbols*))))) a-expr)
+     (s-app (parse f-expr) (parse a-expr))]
+    [else (error 'parse "unable to parse the s-expression ~s" sexp)]))
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DESUGARING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; desugar : S-A3L? -> A3L?
+;; Takes a syntax tree for our surface syntax, and turns it into a tree in our core language
+;; Most cases are straightforward, we highlight the ones that aren't
+(define (desugar ast)
+  (type-case S-A3L ast
+    [s-setvar! (var exp) (setvar! var (desugar exp))]
+    [s-num (n) (num n)]
+    [s-bool (b) (bool b)]
+    [s-id (name) (id name)]
+    [s-add (lhs rhs) (binop + numV (desugar lhs) (desugar rhs))]
+    [s-sub (lhs rhs) (binop - numV (desugar lhs) (desugar rhs))]
+    [s-mult (lhs rhs) (binop * numV (desugar lhs) (desugar rhs))]
+    [s-< (lhs rhs) (binop < boolV (desugar lhs) (desugar rhs))]
+    [s-= (lhs rhs) (binop = boolV (desugar lhs) (desugar rhs))]
+    ;; with gets desugared into function applications
+    [s-with (name named-exp body)
+            (desugar (s-app (s-fun name body) 
+                            named-exp))]
+    ;; lazy-with gets desugared into byname function application
+    [s-lazy-with (name named-exp body)
+                 (desugar (s-app (s-byname-fun name body) 
+                                 named-exp))]
+    [s-byname-fun (arg-name body) (byname-fun arg-name (desugar body))] 
+    [s-fun (arg-name body) (fun arg-name (desugar body))]
+    [s-app (fun-exp arg-exp)
+           (app (desugar fun-exp) (desugar arg-exp))]
+    [s-ifb (c t e) (ifb (desugar c) (desugar t) (desugar e))]
+    [s-whileb (c b) (whileb (desugar c) (desugar b))]
+    ;; begin gets desugared away into (eager) with expressions that ignore the bound variable
+    ;; we use as a trick the fact that 'begin is not a valid identifier,
+    ;; so it will never be used in programs.
+    ;; We then in turn get desugar away withs into (eager) function applications
+    ;; via the natural recursion.
+    [s-begin (es) (desugar (foldl (lambda (e1 e2)  (s-with 'begin e2 e1)) (first es) (rest es)))]
+    ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; INTERPRETATION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; A valid location is a number greater than 1000
+;; This is arbitrary, but it makes it easy to distinguish locations from
+;; normal numbers in our examples
+(define location? (lambda (n) (and (number? n) (>= n 1000))))
+
+;; Values in our internal "desugared" abstract syntax.
+;; Values are the result of interpretation,
+;; and they are also what we keep in the store 
+(define-type  A3L-value
+  ;; number or boolean is a value
+  [numV (n number?)]
+  [boolV (b boolean?)]
+  ;; we have two types of closures, eager and byname-
+  ;; the carry the same data, but our interpreter case for application
+  ;; needs to be able to tell whether the function it's calling is byname or eager
+  [eager-closureV (arg-name symbol?) (body  A3L?) 
+                  (env Env?)]
+  [byname-closureV (arg-name symbol?) (body  A3L?) 
+                   (env Env?)]
+  
+  ;; A thunk is like a closure, but it has no argument
+  ;; It's a way to "freeze" an expression, saving it and its environment
+  ;; to be evaluated later.
+  ;; Use these to implement call-by-name functions
+  [thunkV (body  A3L?) (env Env?)])
+
+;; The environment associates names with store locations
+;; This is what allows us to have mutable variables
+(define-type Env 
+  [mtEnv]
+  [anEnv (id symbol?)
+         (loc location?) 
+         (more-subs Env?)])
+
+;; lookup : symbol Env ->  A3L-Value
+;; Finds the location for name in env or errors if name is undefined
+(define (lookup name env)
+  (local ([define (lookup-helper name env)
+            (type-case Env env
+              [mtEnv () (error 'lookup "free identifier ~a" name)]
+              [anEnv (bound-name bound-value rest-env)
+                     (if (symbol=? bound-name name)
+                         bound-value
+                         (lookup-helper name rest-env))])])
+    (lookup-helper name env)))
+
+;; A store associates store locations with values.
+;; A store can be empty, or we can extend a store with a value for a location.
+;; If we use (aStore loc val rest) where loc is already in rest,
+;; then val is the "new" value for loc in rest
+;; i.e. it works as if we had overwritten the old value
+(define-type Store
+  [mtSto]
+  [aStore (location location?) (value  A3L-value?) (restStore Store?)]) ; DONE
+
+;; allocate-locn : Store -> number
+;; produce a memory location that is unused in the Store
+;; You will need to call this, but you don't need to know what it's doing,
+;; other than it generates a store location that isn't in the given store.
+(define (allocate-locn sto)
+  (local [(define (max-locn sto)
+            (type-case Store sto
+              [mtSto () (- 1000 1)]
+              [aStore (alloc-locn stored-value rest-sto)
+                      (max alloc-locn (max-locn rest-sto))]))]
+    (+ 1 (max-locn sto))))
+
+;; lookup-store : number Store ->  A3L-Value
+;; Finds the value at locn in sto or errors if locn does not exist
+(define (lookup-store locn sto)
+  (local ([define (lookup-helper locn sto)
+            (type-case Store sto
+              [mtSto () (error 'lookup-store "unallocated memory location ~a" locn)]
+              [aStore (alloc-locn stored-value rest-sto)
+                      (if (= alloc-locn locn)
+                          stored-value
+                          (lookup-helper locn rest-sto))])])
+    (lookup-helper locn sto)))
+
+;;Helper for checking the shape of values
+(define (is-a? pred value)
+  (if (pred value)
+      value
+      (error "value is not what you expected")))
+
+;;Turn an operation on numbers to one on "constructor" values
+;;constructor should either be numV or boolV, and is used to turn the resulting
+;;number or boolean into our Value datatype.
+(define (wrap-after-binop f constructor l r)
+  (constructor (f (numV-n (is-a? numV? l))
+                  (numV-n (is-a? numV? r)))))
+
+(define-type ValueXStore
+  [VxS (value A3L-value?) (store Store?)])
+
+;; interp :  A3L Env ->  A3L-value
+;; interprets exp in the empty environment producing the resulting value
+(define (interp exp)
+  (local [;; helper :  A3L Env Store -> ( A3L-value * Store)
+          ;; that is, helper takes in an A3L expression, an environment, and a store
+          ;; and produces two results: the value of the computation, and a new store
+          ;; reflecting any side-effects from evaluation
+          ;; take a look at the cases we've given you to see how you can use (define-values) to give
+          ;; names to both return values from recursive calls
+          ;; and how to use (values) to return a value and a state
+          (define (helper exp env sto)
+            (type-case  A3L exp
+              [num (n)  (VxS (numV n)  
+                             sto)]
+              [bool (b) (VxS (boolV b)  
+                             sto)]
+              [binop (op value-constructor l r)
+                     (type-case ValueXStore (helper l env sto)
+                       [VxS (l-value l-store)
+                            (type-case ValueXStore (helper r env l-store)
+                              [VxS (r-value r-store)
+                                   (VxS (wrap-after-binop op
+                                                          value-constructor
+                                                          l-value
+                                                          r-value)
+                                        r-store)])])]
+             
+              ;;Evaluating (id x) should return the most recent value
+              ;;assigned to variable x.
+              ;;HOWEVER, if this results in a thunk, then we have to evaluate
+              ;; its contents to a value (because it comes from a by-name argument)
+              [id  (name) (let*
+                              ([loc (lookup name env)]
+                               [id-val (lookup-store loc sto)])
+                            (type-case A3L-value id-val
+                              [thunkV (thunk-body thunk-env)
+                                      ; By tail recursion, we know
+                                      ; this call for helper will return the
+                                      ; value of the contents of the thunk with
+                                      ; its new store
+                                      (helper thunk-body
+                                              thunk-env
+                                              sto)]
+                              ; If it is not a thunk, we can just return
+                              ; the plain value from the store:
+                              [else (VxS id-val sto)])
+                            )]
+              ;; Fun represents call-by-value functions (i.e. eager)
+              ;; it thus evaluate to an "eager" closure.
+              [fun (arg-name body)
+                   (VxS (eager-closureV arg-name body env)
+                        sto)]
+              
+              ;;A3: Byname-fun evaluates to a byname closure
+              ;;    These look the same as Fun, but we keep them separate
+              ;;    So that when we evaluate an application we can tell
+              ;;    What to do with the argument depending on whether the closure
+              ;;    is byname or eager.
+              ;;    We've implemented this for you, to help you see how app should work.
+              [byname-fun (arg-name body)
+                          (VxS (byname-closureV arg-name body env)
+                               sto)]
+              [ifb (tst thn els) 
+                   (type-case ValueXStore (helper tst env sto)
+                     [VxS (tst-val tst-sto)
+                          (type-case  A3L-value tst-val 
+                            [boolV (b) (if b 
+                                           (helper thn env tst-sto)
+                                           (helper els env tst-sto))]
+                            [else (error "The test expression of an ifb must evaluate to a boolean.")])])]
+
+              ;; A3: implement while-loops
+              ;;     A while loop should keep executing its body until the test
+              ;;     evaluates to false, and then should produce 0 as a result.
+              ;;     TODO
+              ; tst: A3L
+              ; body: A3L
+              [whileb (tst body)
+                      (type-case ValueXStore (helper tst env sto) ; calling the function helper
+                        ; value: A3L-value?
+                        ; store: Store?
+                        [VxS (tst-value tst-store)
+                             (type-case A3L-value tst-value
+                               [boolV (b) (if b
+                                              (type-case ValueXStore (helper body env tst-store)
+                                                [VxS (while-val while-store)
+                                                     (helper (whileb
+                                                              tst
+                                                              body)
+                                                             env
+                                                             while-store)]); need to ev‹‹‹‹‹‹‹aulate body 
+                                              (VxS (numV 0) sto) ; TODO what to return if leaving the loop? was just returning tst-value
+                                              )]
+                               ;(type-case ValueXStore (helper body env tst-store) ; should be able to move to helper and combine with above one
+                               ;  [VxS (while-val while-store)
+                               ;       (helper while-val env while-store)]))]
+                               [else (error "The test expression of a whileb must evaluate to a boolean.")])])]
+              
+              ;;A3: implement application
+              ;;    Remember that f could be a byname or eager function
+              ;;    When the a byname function runs, you should only evaluate its
+              ;;    argument expression when the argument is used, and do so
+              ;;    as many times as it is used.
+              ;;Hint: you will need to use thunkV for something in one of the cases
+              ;;TODO
+
+              ;; substitution - have to go through entire function beforehand
+              ;;      - replacing thing so we have new program so we have to know how to decompile
+
+              ;; env - when we encounter an id we replace it with the closest id in the scope (most recently defined)
+              ;;    - if something isn't defined then we want to FAIL
+              ;; closure - the parsed/desugared version of the function -
+              ;;              remembers definitions of the body of function, argument of function, environment
+              
+              [app (fun arg)
+                   ;;  fun-val is the closure
+                   ;; store we pass around, has the lastest state of memory
+                   ;; environment only has mappings from names to where they should be in memory
+                   ;; fun-sto is the store that comes from running result of the function evaluation, any updated state 
+                   (type-case ValueXStore (helper fun env sto)
+                     ; we don't need boxes here? very similar to swap function in october 4th lecture in simRefClosureV
+                     ; the book does it without boxes
+                     [VxS (fun-val fun-sto)
+                          (local [(define arg-loc (allocate-locn fun-sto))]
+                            (type-case A3L-value fun-val
+                              ;; eager-closureV - run argument before putting into function (most languages)
+                              ;; If theres an error in the arg, return the error before executing the function
+                              ;; after evaluated, replace each instance of the fully evaluated arg in the body
+                              [eager-closureV (arg-name body clo-env)
+                                              (local [(define evaluated-arg
+                                                        (helper arg ; the actual argument
+                                                                env ; in lecture they just used env
+                                                                fun-sto))] ; feed the function with the evaluated expression. Updating the function store - put regular store with regular example
+
+                                                (helper body
+                                                        (anEnv arg-name arg-loc clo-env) ; an env  list of lookups I can preform
+                                                        (aStore arg-loc (VxS-value evaluated-arg) (VxS-store evaluated-arg)); a store, hashmap of exact values
+                                                        ))]
+                              [byname-closureV (arg-name body clo-env)
+                                               (helper body
+                                                       (anEnv arg-name arg-loc clo-env) ; an env  list of lookups I can preform
+                                                       (aStore arg-loc (thunkV arg env) fun-sto); a store, hashmap of exact values
+                                                       )]
+                              ;; The Thunk has a body and an env and doesn't need arg?
+                              ;; The Thunk has some code that you can run later
+                              ;; Two ways to think of a Thunk
+                              ;; - A function with no arguments (but we don't have that)
+                              ;; - A way to remember some code that you might want to run later ( byname-closureV? as the arg)
+                              ;; fill in closure with the puzzle pieces that we're given in the argument
+                              [else (error "You can only apply closures!")]))])]
+             
+              ;;A3: implement variable mutation
+              ;;Any occurrences of x after (setvar! x val) and before other assignments
+              ;;should evaluate to val
+              ;;(setvar! id exp) should return the new value of id as its result
+              [setvar! (varname exp)
+                       (type-case ValueXStore (helper exp env sto)
+                         [VxS (exp-val exp-sto)
+                              (VxS exp-val
+                                   (aStore (lookup varname env) exp-val sto))])]
+              ))]
+    (type-case ValueXStore (helper exp (mtEnv) (mtSto))
+      [VxS (val final-store)
+           val])))
+
+;; A shortcut: parse, desugar, and run the program
+;; from the given piece of concrete syntax
+(define (run sexp)
+  (interp (desugar (parse sexp)) ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; A3 Puzzles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;Your challenge is to write an A3L expression that runs
+;; and produces a value, but when you replace all "fun" definitions
+;; with "byname-fun", produces a different value.
+;;Both should terminate, and neither should raise an error.
+
+;;We've given a function (make-byname-) that takes concrete syntax
+;;and replaces all the fun occurences byname-fun
+
+(define (make-byname sexp)
+  (match sexp
+    [(cons 'fun rest) (cons 'byname-fun (map make-byname rest))]
+    [(cons hd tl) (cons (make-byname hd) (map make-byname tl))]
+    [_ sexp]))
+
+;; Here's an example, but we'll show you a case where they produce the same result
+(define ourExample '{{fun {x} {+ x 1}} 0})
+
+(test (equal? (run ourExample) (run (make-byname ourExample))) true)
+
+;; TODO Write the function.
+;;      You define the eager version
+;;      Our tests will make the byname version of your function
+(define yourExample '{with {x 0}
+                           {{fun {y}
+                                 {begin {setvar! x 1}
+                                        {setvat! y x}}}}})
+(print-only-errors)
+(test (equal? (run yourExample) (run (make-byname yourExample))) false)
+
+;;;;;;;;;;;;;;;;;;
+;; A3 public tests
+;;;;;;;;;;;;;;;;;
+
+;;Basic function test 
+(test (run '{with {f {fun {x} {+ x 1}}} {f 2}}) (numV 3))
+(test (run '{with {f {byname-fun {x} {+ x 1}}} {f 2}}) (numV 3))
+
+;;Make sure we can't call call something that isn't a function
+(test/exn (run '{1 2}) "")
+(test/exn (run '{{+ 1 1} 2}) "")
+
+;;Make sure we can produce a function as a result of a computation
+(test (run '{{ifb true {fun {x} x} {fun {x} 1}} 2}) (numV 2))
+(test (run '{{ifb true {byname-fun {x} x} {byname-fun {x} 1}} 2}) (numV 2))
+(test (run '{{ifb false {fun {x} x} {fun {x} 1}} 2}) (numV 1))
+(test (run '{{ifb false {byname-fun {x} x} {byname-fun {x} 1}} 2}) (numV 1))
+
+;;Make sure that an eager function evaluates its argument first
+(test/exn (run '{{fun {x} 0} {1 2}}) "")
+(test/exn (run '{{fun {x} 0} y}) "")
+;;and that a byname one does not
+(test (run '{{byname-fun {x} 0} {1 2}}) (numV 0))
+(test (run '{{byname-fun {x} 0} y}) (numV 0))
+
+; In this test we use a neat trick to produce an infinite loop that should
+; not be a problem when using byname-fun.  This function call should definitely
+; return a value (1).
+(test/timeout (run `{{byname-fun {x} 1} {{fun {x} {x x}} {fun {x} {x x}}}}) (numV 1))
+
+;;Basic setvar tests
+(test (run '{with {x 0} {begin {setvar! x 1} x}}) (numV 1))
+(test (run '{with {x 2} {begin {setvar! x {+ 2 1}} x}}) (numV 3))
+;;Make sure state-change happens after evaluating right-hand-side of assignment
+(test (run '{with {x 2} {begin {setvar! x {+ x 1}} x}}) (numV 3))
+
+;;Make sure we see the changes from setvar in other expressions
+(test (run '{with {x 0} {begin {setvar! x {+ x 1}} {ifb {= x 0} 3 4}}}) (numV 4))
+;;Make sure we only see setvar! changes if we reach the branch it is in
+(test (run '{with {x 0} {ifb {= x 0} {begin {setvar! x 1} x} x}}) (numV 1))
+
+;;Make sure functions are statically scoped
+(test (run '{with {x 3} {with {f {fun {y} {+ x y} }} {with {x 10} {f 5}}}}) (numV 8))
+;;And byname functions are too
+(test (run '{with {x 3} {with {f {byname-fun {y} {+ x y} }} {with {x 10} {f 5}}}}) (numV 8))
+;;Make sure that function variable names shadow existing bindings
+(test (run '{with {x 3} {with {f {fun {x} {+ x 1} }} {f 5}}}) (numV 6))
+;;And byname functions are too
+(test (run '{with {x 3} {with {f {byname-fun {x} {+ x 1} }} {f 5}}}) (numV 6))
+
+;;Make sure state is being properly threaded through
+;;and that it respects scope
+(test (run '{with {x 0} {begin {setvar! x 1} {setvar! x 3} x}}) (numV 3))
+(test (run '{with {x 0} {begin {setvar! x 1}  {with {y 2} {setvar! y 3}} x}}) (numV 1))
+(test (run '{with {x 0} {begin {setvar! x 1}  {with {y 2} {setvar! x 3}} x}}) (numV 3))
+(test (run '{with {x 0} {begin {setvar! x 1}  {with {x 2} {setvar! x 3}} x}}) (numV 1))
+
+
+;;Make sure scope is static for thunks
+(test (run '{with {x 0} {with {f  {fun {y} {+ x y}}} {with {x 10} {f {+ x 1}}}}}) (numV 11))
+(test (run '{with {x 0} {with {f  {byname-fun {y} {+ x y}}} {with {x 10} {f {+ x 1}}}}}) (numV 11))
+
+
+;;Make sure that we copy by value
+(test (run '{with {x 1} {with {z x} {{begin {setvar! x 10} {fun {y} {+ y z}}} 100}}}) (numV 101))
+(test (run '{with {x 1} {with {z x} {{begin {setvar! x 10} {byname-fun {y} {+ y z}}} 100}}}) (numV 101))
+
+;;Make sure function argument names don't conflict with the local environment
+(test (run '{with {x 0} {{{fun {x} {fun {y} {+ x y}}} 10} 100}}) (numV 110))
+(test (run '{with {x 0} {{{byname-fun {x} {fun {y} {+ x y}}} 10} 100}}) (numV 110))
+;;Make sure that function scope doesn't escape into byname functions
+(test/exn (run '{{fun {x} x} x}) "")
+
+;;While loops tests
+
+;;Make sure we never run the body if the conidition starts false
+(test (run '{with {x 0} {begin {whileb false {setvar! x 1}} x}}) (numV 0))
+
+;; Good old factorial
+(test (run '{with {i 5}
+                  {with {ret 1}
+                        {begin
+                          {whileb {< 0 i}
+                                  {begin
+                                    {setvar! ret {* ret i}}
+                                    {setvar! i {- i 1}}
+                                    }}
+                          ret}}})
+      (numV 120))
+
+;; Make sure we only run the relevant branches each time around the while-loop
+(test (run '{with {i 10}
+                  {with {ret 0}
+                        {begin
+                          {whileb {< 0 i}
+                                  {begin
+                                    {ifb {< i 3} {setvar! ret {+ ret 1}} 0}
+                                    {setvar! i {- i 1}}
+                                    }}
+                          ret}}})
+      (numV 2))
+
+;; Make sure we raise an error if a non-boolean is ever the test for a with-expression.
+(test/exn (run '{while 3 0}) "")

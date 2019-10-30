@@ -1,0 +1,172 @@
+#lang plai
+; uncomment the following line to hide all passing tests
+; (print-only-errors)
+
+;; ==========================================================
+;;                     EBNF & DEFINE-TYPES
+;; ==========================================================
+
+; Assignment 2 : With names and renames. 
+;
+;   <ReWAE> ::= <number>
+;          | { + <ReWAE> <ReWAE> }
+;          | { - <ReWAE> <ReWAE> }
+;          | { * <ReWAE> <ReWAE> }
+;          | { begin <ReWAE> <ReWAES> }
+;          | { if0 <ReWAE> then <ReWAE> else <ReWAE> }
+;          | { with { <id> <ReWAE> } <ReWAE> }
+;          | { lazy-with { <id> <ReWAE> } <ReWAE> }
+;          | { rename { <id> as <id> } in <ReWAE> }
+;          | { with* { <WithMappings> } <ReWAE> }
+;          | <id>
+;
+;    <WithMappings> ::=
+;                     | { <id> <ReWAE> } <WithMappings>
+;
+;    <ReWAES> ::=
+;               |  <ReWAE> <ReWAES>
+
+
+; This will be the abstract syntax of our language.
+; REMINDER: YOU CANNOT MAKE ANY CHANGES TO THE DEFINE-TYPE
+; We will take marks for changes in this definition.
+
+(define-type ReWAE     
+  [num (n number?)]
+  [binop (op procedure?) (lhs ReWAE?) (rhs ReWAE?)]
+  [if0 (scrutinee ReWAE?) (then-expr ReWAE?) (else-expr ReWAE?)] 
+  [with (id symbol?) (named-expr ReWAE?) (body ReWAE?)]
+  [lazy-with (id symbol?) (named-expr ReWAE?) (body ReWAE?)]
+  [rename-as (source-id symbol?) (dest-id symbol?) (body ReWAE?)]
+  [begin-exp (exprs (non-empty-listof ReWAE?))]
+  [id (name symbol?)]
+  )
+
+
+
+;; ==========================================================
+;;                           PARSE
+;; ==========================================================
+; TODO You must complete this list of reserved symbols.
+(define *reserved-symbols* '(+ - with))
+
+;; We invite you to reuse the valid-identifier predicate that we have
+;; seen in lectures before:
+
+;; valid-identifier? : any -> boolean
+;; Determines whether the parameter is valid as an identifier name, i.e.,
+;; a symbol that is not reserved.
+(define (valid-identifier? sym)
+  (and (symbol? sym)
+       (not (member sym *reserved-symbols*))))
+
+;; Reserved symbols.
+(test (valid-identifier? 'lazy-with) false)
+(test (valid-identifier? 'else) false)
+
+
+;; TODO: Implement this function.
+
+;; parse : any -> ReWAE
+;; Consumes an s-expression (in ReWAE's concrete syntax)
+;; and generates the corresponding ReWAE program.
+
+(define (parse sexp)
+  (id 'todo))
+
+
+; We STRONGLY recommend you to add more tests to this function!
+(test (parse 'x) (id 'x))
+(test/exn (parse '+) "")
+(test/exn (parse '{-}) "")
+(test/exn (parse '{* 1}) "")
+(test/exn (parse '{+ 1 2 3}) "")
+
+; ill-structured lazy-with
+(test/exn (parse '{lazy-with}) "")
+(test/exn (parse '{lazy-with x}) "")
+(test/exn (parse '{lazy-with x 2 3}) "")
+(test/exn (parse '{lazy-with {x 1}}) "")
+(test/exn (parse '{lazy-with {x 1} 2 3}) "")
+(test/exn (parse '{lazy-with {x 1 2} 3}) "")
+(test/exn (parse '{lazy-with {+ 1} 2}) "")
+
+; + (and -/with) with non-AEs as arguments
+(test/exn (parse '{lazy-with {x "foo"} x}) "")
+(test/exn (parse '{lazy-with {x 1} "foo"}) "")
+
+(test (parse '{with {x 1} x})
+      (with 'x (num 1) (id 'x)))
+(test (parse '{with {x 1} {with {x 2} x}})
+      (with 'x (num 1)
+            (with 'x (num 2) (id 'x))))
+(test (parse '{lazy-with {x 1} x})
+      (lazy-with 'x (num 1) (id 'x)))
+(test (parse '{lazy-with {x 1} {lazy-with {x 2} x}})
+      (lazy-with 'x (num 1)
+            (lazy-with 'x (num 2) (id 'x))))
+
+(test (parse '{rename {x as y} in
+                      x})
+      (rename-as 'x 'y (id 'x)))
+
+(test (parse '{with {x 10}
+                    {rename {x as y} in
+                            x}})
+      (with 'x (num 10)
+            (rename-as 'x 'y (id 'x))))
+
+(test (parse '{* {- 1 2} {+ 3 4}})
+      (binop *
+             (binop - (num 1) (num 2))
+             (binop + (num 3) (num 4))))
+
+; These tests check for errors generated explicitly by you via (error ...)
+; TODO: write more tests for checking that parse generates errors when needed
+(test/exn (parse "I am a string, not a symbol") "")
+(test/exn (parse '{with {} 1}) "")
+(test/exn (parse '{with {{1 x}} x}) "")
+(test/exn (parse '{with* {x 1} x}) "")
+(test/exn (parse 'with) "")
+(test/exn (parse '{a b c}) "")
+
+
+;; ==========================================================
+;;                           INTERP
+;; ==========================================================
+
+;; subst : ReWAE symbol ReWAE -> ReWAE
+;; substitute out target-id for val everywhere it
+;; is rerenced "free" in target-exp.
+(define (subst target-exp target-id val)
+  target-exp)
+
+(test (subst (num 10) 'x (num 1)) (num 10))
+
+;; TODO The test provided is just an example.
+;;      You must provide more tests for subst!
+
+
+;; TODO you must also write the interp function!
+
+;; interp : ReWAE -> number
+;; consumes a ReWAE and computes the corresponding number
+(define (interp an-ae)
+  0)
+
+; TODO: write more tests for interp as needed
+(test (interp (with 'x (num 1) (id 'x))) 1)
+(test (interp (binop - (num 8) (num 3))) 5)
+(test (interp (binop -
+                     (binop * (num 5) (num 6))
+                     (binop + (num -10) (num 2))))
+      38)
+(test (interp (with 'x (num 1) (num 2))) 2)
+(test (interp (with 'x (binop + (num 1) (num 2)) (id 'x))) 3)
+(test (interp (with 'x (num 1) (id 'x))) 1)
+(test (interp (with 'x (num 1)
+                    (with 'x (num 2) (id 'x)))) 2)
+(test (interp (with 'x (num 1)
+                    (with 'x (id 'x) (id 'x))))
+      1)
+(test/exn (interp (id 'y)) "")

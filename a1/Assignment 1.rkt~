@@ -1,0 +1,442 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname |Assignment 1|) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+#lang plai
+
+;; NOTE: We expect not to grade roughly two of the eight questions,
+;; but we're not saying which ones, and they're all good for practice!
+;; :)
+
+;; Running this will make it so that only the failed tests print out:
+(print-only-errors)
+
+;;;; PROBLEM #1 ;;;;
+;;
+;; Complete the function.  There's some messy math here,
+;; but the real point is to look up help in the Racket
+;; documentation! :)
+
+;; fermat-primality-test : positive positive -> bool
+;; Given an integer a >= 2 and an integer n > a, determine
+;; whether the remainder when we divide a^(n-1) by n
+;; is equal to 1. Note that a^(n-1) is a raised to the
+;; power of n-1.
+;;
+;; It isn't important for our purposes to know this, but
+;; the Fermat primality test is a step toward a good
+;; "probabilistic primality test", trying to test whether
+;; n is prime. As is, the test is "complete but not sound"
+;; meaning that if it says false, it's correct, but if
+;; it says true, it may be incorrect.
+;;
+;; Hint: look up the identifier "expt" in the helpdesk.
+;; Then, look up (or just look around from there) for
+;; "remainder".
+;; positive positive -> Boolean
+;; Produce true if
+
+(check-expect (fermat-primality-test 1 3) false)
+
+
+; Smallest case
+(test (fermat-primality-test 2 3) true)
+
+; A false case
+(test (fermat-primality-test 2 4) false)
+
+; A few extra true and false cases, including one that shows
+; that this is not a sound primality test!
+(test (fermat-primality-test 2 6) false)
+(test (fermat-primality-test 3 7) true)
+(test (fermat-primality-test 4 6) false)
+(test (fermat-primality-test 2 341) true)
+
+(define (fermat-primality-test a n)
+  (cond [(< a 2) false]
+        [(<= n a) false]))
+
+;;;; PROBLEM #2 ;;;;
+;;
+;; Complete the function.  
+;; You'll certainly want to look up string functions to make this work.
+;; You could also convert the strings to lists and work with them in that form!
+
+;; match-length : string string -> natural
+
+;; Compute the number of letters exactly matching at the start of the two strings
+;; (before there's a difference).
+;;
+;; E.g., (match-length "wesselton" "weasel-town") evaluates to 2.
+(define (match-length string1 string2)
+  ; Feel free NOT to use the provided local variable definition here:
+  (local [(define shorter-len (min (string-length string1)
+                                   (string-length string2)))]
+    'TODO))
+
+; Trivial cases.
+(test (match-length "" "") 0)
+(test (match-length "" "elsa") 0)
+(test (match-length "elsa" "") 0)
+
+; Simple one-character match/non-match.
+(test (match-length "a" "a") 1)
+(test (match-length "a" "b") 0)
+
+; Matching prefixes.
+(test (match-length "wesselton" "weasel-town") 2)
+
+; One is a prefix of the other.
+(test (match-length "weasel" "weasel-town") 6)
+(test (match-length "weasel-town" "weasel") 6)
+
+; Exactly matching longer strings.
+(test (match-length "Sven" "Sven") 4)  ; they're both Sven?!
+
+; Case matters
+(test (match-length "a" "A") 0)
+
+
+
+;;;; PROBLEM #3 ;;;;
+;;
+;; Complete the function.  You'll want to remind yourself of
+;; some list functions for this one!
+
+
+;; interleave : (listof any?) (listof any?) -> (listof any?)
+;; Interleave the elements of list1 and list2.
+;;
+;; So, give back a list with the first element of list1, then the
+;; first of list2, then the second of list1, then the second of list2,
+;; and so on.
+;;
+;; If one list ends before the other, include all leftover elements of
+;; the other list in a row.
+(define (interleave list1 list2)
+  'TODO)
+
+;; We could make a tail-recursive version, but we would have to
+;; reverse the result at the end; so, it doesn't seem that compelling. :)
+
+;; Besides, that implementation above is just too beautiful!
+;; A 4-case solution is very natural and also definitely great!
+
+
+(test (interleave empty empty) empty)
+(test (interleave '(1 2 3) empty) '(1 2 3))
+(test (interleave empty '(1 2 3)) '(1 2 3))
+(test (interleave '(1) '(2)) '(1 2))
+(test (interleave '(2) '(1)) '(2 1))
+(test (interleave '(1 3) '(2)) '(1 2 3))
+(test (interleave '(1 3 5 7) '(2 4 6 8 9)) '(1 2 3 4 5 6 7 8 9))
+(test (interleave '(1 3 5 7 8 9) '(2 4 6)) '(1 2 3 4 5 6 7 8 9))
+
+; Not just numbers!
+(test (interleave '(z y x w) '("a" 1 "and a" 2 "and a" 3))
+      '(z "a" y 1 x "and a" w 2 "and a" 3))
+
+
+;;;; PROBLEM #4 ;;;;
+;;
+;; Complete the function.  More list practice!
+
+;; contains-sequence : (list-of symbol?) (list-of symbol?) -> boolean?
+;; Determine whether data contains the elements from sequence in order (but not necessarily right next to each other).
+(define (contains-sequence data sequence)
+  'TODO)
+
+;; True tests, trivial through complex
+;; plus repeated symbols.
+(test (contains-sequence empty empty) true)
+(test (contains-sequence '(a) empty) true)
+(test (contains-sequence '(a b) '(a)) true)
+(test (contains-sequence '(a b) '(b)) true)
+(test (contains-sequence '(a b c) '(a c)) true)
+(test (contains-sequence '(a b c) '(a b)) true)
+(test (contains-sequence '(a b c) '(a b c)) true)
+(test (contains-sequence '(a b a) '(a a)) true)
+
+;; False test, trivial through complex.
+(test (contains-sequence empty '(a)) false)
+(test (contains-sequence '(a) '(b)) false)
+(test (contains-sequence '(a b) '(b a)) false)
+(test (contains-sequence '(a b) '(a a)) false)
+
+
+;;;; PROBLEM #5 ;;;;
+;;
+;; Thoroughly test this function.  Do NOT use check-expect.  
+;; Use plai's test construct instead.
+;;
+;; You can find documentation on define-type, type-case, and test
+;; in the plai documentation in DrRacket's helpdesk. You can also
+;; find discussion of them in the textbook in Chapters 1 and 3.
+
+(define-type Thingy
+  [a-thingy (really? boolean?)]
+  [other-thingy (no? boolean?) (maybe? boolean?) (sub-thingy Thingy?)])
+
+;; all-thingied : Thingy -> boolean?
+;; Determines whether all the booleans in the Thingy are true.
+;;
+;; Note: type-case is REALLY handy for functions over define-type types.
+;; However, you can also access fields with functions like other-thingy-sub-thingy
+;; which, given an other-thingy returns its sub-thingy field. This feels
+;; similar to dotted notation in many C-like syntaxes, except that the whole
+;; thing is just a single identifier (not two syntactic pieces connected by
+;; a dot operator).
+(define (all-thingied thingy)
+  (type-case Thingy thingy
+    [a-thingy (b) b]
+    [other-thingy (n m sub-thingy) (and n m (all-thingied sub-thingy))]))
+
+; Here's one test. You supply the rest! Make a thorough but
+; reasonably parsimonious list.
+(test (all-thingied (a-thingy true)) true)
+
+(test 'MAKE-MORE-PROBLEM5-TESTS 'TODO)
+
+
+
+
+;;;; PROBLEM #6 ;;;;
+;;
+;; Time for define-type.  This is a big one.
+;; find-species works well with a HtDP-like "template" approach.
+;; is-extinct? should be easy using find-species.
+;; common-ancestor is fairly tricky, but let the test cases guide you!
+;;
+;; Complete find-species, is-extinct?, and common-ancestor.
+
+
+;; The "tree of life" is the biological tree of species charting 
+;; the evolution of one species from another.
+(define-type tree-of-life
+  [empty-tree]
+  [species (name string?) (extinct? boolean?) (child1 tree-of-life?) (child2 tree-of-life?)])
+
+(define human-species-ToL (species "human" false (empty-tree) (empty-tree)))
+(define troll-species-ToL (species "troll" true (empty-tree) (empty-tree)))
+(define three-species-ToL (species "missing-link" true human-species-ToL troll-species-ToL))
+
+;; find-species : string tree-of-life -> (or false tree-of-life)
+;; Produces the tree-of-life node representing the named species if it exists. Else, produces false.
+;; (Note: we could actually make the return type more specific: it's false or species.)
+;; 
+;; Precondition: the species with the given name appears AT MOST once (i.e., zero or one time).
+(define (find-species name tree)
+  'TODO)
+
+(test (find-species "elsa" (empty-tree)) false)
+(test (find-species "elsa" human-species-ToL) false)
+(test (find-species "elsa" three-species-ToL) false)
+(test (find-species "human" human-species-ToL) human-species-ToL)
+(test (find-species "human" three-species-ToL) human-species-ToL)
+(test (find-species "troll" three-species-ToL) troll-species-ToL)
+
+
+
+;; is-extinct? : string tree-of-life -> boolean
+;; Determines whether the given species is recorded as exctinct in the given tree.
+;;
+;; Precondition: the species with the given name appears exactly once in the tree.
+;; Hint: use find-species!
+(define (is-extinct? name tree)
+  ;; plai data-types provide helpers and accessors like
+  ;; empty-tree? and species-name or species-extinct?,
+  ;; although you can use type-case instead if you want.
+  ;; Here, we know the species exists (it's a given); so,
+  ;; we know our find-species function can return a species
+  ;; to us (NOT a empty-tree). You can take advantage of
+  ;; that to make the code shorter/clearer if you'd like.
+  'TODO)
+
+(test (is-extinct? "troll" three-species-ToL) true)
+(test (is-extinct? "human" three-species-ToL) false)
+
+;; common-ancestor : string string tree-of-life -> (or false tree-of-life)
+;; Returns the node of the closest common ancestor OR false if one or both species does not exist in the tree.
+;; DOES NOT NEED TO BE EFFICIENT.
+;;
+;; Precondition: each named species appears AT MOST once (i.e., zero or one time).
+(define (common-ancestor name1 name2 tree)
+  'TODO)
+
+; Neither appears
+(test (common-ancestor "elsa" "anna" (empty-tree)) false)
+(test (common-ancestor "elsa" "anna" human-species-ToL) false)
+(test (common-ancestor "elsa" "anna" three-species-ToL) false)
+
+; Only one appears (both orders)
+(test (common-ancestor "elsa" "human" human-species-ToL) false)
+(test (common-ancestor "human" "elsa" human-species-ToL) false)
+(test (common-ancestor "elsa" "human" three-species-ToL) false)
+(test (common-ancestor "human" "elsa" three-species-ToL) false)
+
+; One is THIS node, other in subtree.
+(test (common-ancestor "missing-link" "human" three-species-ToL) three-species-ToL)
+(test (common-ancestor "human" "missing-link" three-species-ToL) three-species-ToL)
+(test (common-ancestor "missing-link" "troll" three-species-ToL) three-species-ToL)
+(test (common-ancestor "troll" "missing-link" three-species-ToL) three-species-ToL)
+
+; Both appear in different subtrees.
+(test (common-ancestor "troll" "human" three-species-ToL) three-species-ToL)
+(test (common-ancestor "human" "troll" three-species-ToL) three-species-ToL)
+
+
+; Both appear in the same subtree.
+(define subtree-appearances-right (species "goo" false 
+                                           (species "foo" true (empty-tree) (empty-tree))
+                                           three-species-ToL))
+(define subtree-appearances-left (species "goo" false 
+                                          three-species-ToL
+                                          (species "foo" true (empty-tree) (empty-tree))))
+
+(test (common-ancestor "troll" "human" subtree-appearances-right) three-species-ToL)
+(test (common-ancestor "human" "troll" subtree-appearances-right) three-species-ToL)
+(test (common-ancestor "troll" "human" subtree-appearances-left) three-species-ToL)
+(test (common-ancestor "human" "troll" subtree-appearances-left) three-species-ToL)
+(test (common-ancestor "missing-link" "human" subtree-appearances-right) three-species-ToL)
+(test (common-ancestor "human" "missing-link" subtree-appearances-right) three-species-ToL)
+(test (common-ancestor "missing-link" "human" subtree-appearances-left) three-species-ToL)
+(test (common-ancestor "human" "missing-link" subtree-appearances-left) three-species-ToL)
+
+; Both are ONE node.
+(test (common-ancestor "troll" "troll" troll-species-ToL) troll-species-ToL)
+(test (common-ancestor "troll" "troll" subtree-appearances-left) troll-species-ToL)
+
+
+
+
+
+
+;;;; PROBLEM #7 ;;;;
+;;
+;; Here's a small EBNF specification for a language.  Finish the
+;; abstract syntax (a define-type named OE for "order expression") for
+;; the language.
+;;
+;; <expr> ::= (group <expr> <expr>)
+;;          | (sequentially <expr> <expr>)
+;;          | (together <expr> <expr>)
+;;          | (join <expr> <expr>)
+;;          | (arrive <expr>)
+;;          | (give <expr> name <id> in <expr>)
+;;          | <string>
+;;          | <id>
+;;
+;; Notes: Use "name" as the name of the (give <expr> name <id> in
+;; <expr>) variant.  Assume that a <string> is just a Racket string,
+;; and an <id> is just a Racket symbol.  We suggest you call the
+;; <string> variant string-literal and the <id> variant id-ref.
+;;
+;; Before you ask: yes, the 6th, 7th, and 8th cases are a bit
+;; different from the others. Note that an abstract syntax ABSTRACTS
+;; from the concrete syntax. To give you a hint to what this means:
+;;
+;; 1) Solve the second case. (Go do that now. Don't look at the next
+;;    step yet. Spoilers!)
+;;
+;; 2) Did you look? Well, that was a mistake. Go finish step 1 and
+;;    then go on to step 3. Otherwise, pat yourself on the back and
+;;    then go on to step 3.
+;;
+;; 3) Note that your solution to that second case would be JUST AS
+;;    GOOD abstract syntax if the concrete syntax were
+;;    (sequentially <expr> then <expr>) instead of
+;;    (sequentially <expr> <expr>).
+
+(define-type OE
+  [group (expr1 OE?) (expr2 OE?)]) ;; TODO: add the remaining variants!
+
+
+
+;;;; PROBLEM #8 ;;;;
+;;
+;; Let's get a bit more practice with EBNF. Read about regexp at
+;; https://docs.racket-lang.org/reference/regexp.html#%28part._regexp-syntax%29
+;; (Note that we'll use the regexp syntax, not the pregexp syntax in this problem.
+;; For practical applications, however, you may want to use pregexp!)
+;;
+;; Now, for each of the following subproblems, you'll "explain" whether it is a legal regular expression.
+;; Specifically, create a variable named reparseN (for appropriate N, e.g., reparse1, reparse2, etc.)
+;; that contains a comma-separated list of the non-terminals used to match that regexp (in "depth-first" order;
+;; so, going all the way down until there are no non-terminals on the very first piece of the regexp and then continuing
+;; in the same way with the next piece) UNLESS it isn't a legal regexp, in which case just make the variable contain the empty string.
+;;
+;; For example, "[abc" is not a legal regexp. So, if that were subproblem 42, then you should say (define reparse42 "").
+;; On the other hand, "[^a-db]" IS a legal regexp. So, if that were subproblem 1729, then you should say:
+;;
+;;   (define reparse1729 "regexp,pces,pce,atom,rng,mrng,lirng,lirng,riliteral,riliteral,lrng,lirng,riliteral,pces")
+;;
+;; That represents finding that "[^a-db]" is a legal regular expression by working through the rules this way:
+;;
+;;        <regexp> ::= <pces>
+;;                       |
+;;                       |
+;;               <pces> ::= <pce><pces>
+;;                          /        \
+;;                         /          \
+;;                        /    <pces> ::=     ;; That is, just a blank.
+;;                       /
+;;                      /
+;;              <pce> ::= <atom>
+;;                           |
+;;                           |
+;;                   <atom> ::= [^<rng>]
+;;                                  |
+;;                                  |
+;;                           <rng> ::= <mrng>
+;;                                       |
+;;                                       |
+;;                               <mrng> ::= <lirng>
+;;                                             |
+;;                                             |
+;;                                    <lirng> ::= <lirng><lrng>
+;;                                                  /        \
+;;                                                 /          \
+;;                                                /    <lrng> ::= <lirng>
+;;                                               /                    \
+;;                                              /                      \
+;;                                             /               <lirng> ::= <riliteral>
+;;                                            /               (<riliteral> becomes a terminal)
+;;                                           /                 
+;;                                 <lirng> ::= <riliteral>-<riliteral>
+;;                                (both <riliteral>s become terminals)
+;;
+;; You can see the "depth-first" order through this tree by starting at the top and
+;; then running your finger all the way around the figure starting on the left side.
+;; You'll first encounter <regexp>, then <pces>, then <pce>, then <atom>, and so on.
+;; Once you make it around the bottom (at <riliteral>-<riliteral>), you'll wrap around,
+;; up to the bottom of <lirng><lrng>, and then encounter <lrng>, <lirng>, and
+;; <riliteral>, before working your way up the right side, picking up one last <pces>.
+
+
+; Subproblem 1: "(ab)|c"
+(define reparse1 'TODO)
+
+; Here's how we'll test. DON'T LOOK AT THIS YET! Solve this one on your own and
+; then work through whether and where you don't match our solution.
+(test reparse1 "regexp,regexp,pces,pce,atom,regexp,pces,pce,atom,literal,pces,pce,atom,literal,pces,pces,regexp,pces,pce,atom,literal,pces")
+
+
+; Subproblem 2: "(ab)|"
+(define reparse2 'TODO)
+
+; Subproblem 3: "+*"
+(define reparse3 'TODO)
+
+; Subproblem 4: "[]a]"
+(define reparse4 'TODO)
+
+; Subproblem 5: ".??"
+(define reparse5 'TODO)
+
+
+
+
+;; Non-required extra question: Do any of the rules in the regexp syntax--BESIDES the ones for
+;; <literal>, <aliteral>, <riliteral>. and <rliteral>--break the rules of EBNF?
+;;
+;; Aside: those four literal rules could be rewritten so they don't break any rules, but listing
+;; out all the legal unicode characters would take a lot of space!

@@ -46,8 +46,8 @@
    (with-handlers ([exn:fail:resource?
                     (lambda (original-error)
                       (error "timed out : ~s" original-error))])
-                   (with-limits 5 256 actual))
-                 "timed out"))
+     (with-limits 5 256 actual))
+   "timed out"))
 
 ;; A4L : The Assignment 4 Language
 
@@ -166,7 +166,7 @@
                  (parse body))]
     [(list 'fun (list (? valid-identifier? names) ...) body)
      (s-fun names (parse body))]
-        [(? valid-identifier?) (s-id sexp)]
+    [(? valid-identifier?) (s-id sexp)]
     ; For function calls to work they must be the last list expression matched.
     [(list fun-exp arg-exp ..1)
      (s-app (parse fun-exp) (map parse arg-exp))]
@@ -193,19 +193,24 @@
                                        (desugar (second defn))))
                                defns)
                           (desugar body))]
-    [s-fun (ids base) (foldr (lambda (x acc) (fun x acc))
-                             (desugar base)
-                             ids)]
+    [s-fun (ids base)
+           (foldr (lambda (x acc) (fun x acc))
+                  (desugar base)
+                  ids)]
     ;TODO: Fix the following incorrect desugaring for multiple arguments here.
     ;      It must be compatible with the desugaring that we have provided
-    ;      For functions in the line before. Oct 16th has desugaring
-    ; Take the function and apply the desugared version with the desugared arguments
-    ; look at Oct 16th desugaring & define-type compared to this
-    [s-app (fn args) (app (desugar fn)
-                          (foldr (lambda (x acc) (fun x acc))
-                             (last args)
-                             args))]
-    ; (app (desugar f) (desugar (last a))) original 
+    ;      For functions in the line before
+    [s-app (fn definitions)
+           (foldl (lambda (frst; value
+                           rslt; rest of natural recursion
+                           ) (app rslt
+                              (desugar frst))) ; how to put them together
+                  (desugar fn)
+                  definitions)]
+                                   
+    ; (fun-exp s-A4L?) (arg-expr (lambda (x) (andmap s-A4L? x))) ; s-app format (s-app (s-A4L) (listof s-A4L))
+    ; [app (fun-expr A4L?) (arg-expr A4L?)]                      ; app format (app (A4L) (app (A4L) (app (A4L) (A4L))))
+    ; (app (desugar f) (desugar (last a)))                       ; original 
     [s-id (x) (id x)]
     [s-strict (a) (strict-A4L (desugar a))]))
 
@@ -296,7 +301,7 @@
           ;; for recursion
           (define (cyclically-bind-and-interp name bound-expr env)
             (local ([define box-for-name (box #f)]
-                    [define new-env (aRecEnv name box-for-name env)] ;AINE why?
+                    [define new-env (aRecEnv name box-for-name env)]
                     [define bound-val (helper bound-expr new-env)])
               (begin
                 (set-box! box-for-name bound-val)
@@ -312,7 +317,7 @@
               ;base case?
               (cond [(empty? decls) env]
                     [else
-                      (mutually-cyclically-bind-and-interp (rest decls) env-2)])))
+                     (mutually-cyclically-bind-and-interp (rest decls) env-2)])))
               
           ; helper : A4L Env -> Value  
           (define (helper expr env)
@@ -326,15 +331,16 @@
               ;        Keep in mind: What is the minimum amount of strictness
               ;                      that would make this work?
               [if0 (scr thn els)
-                   (if (= 0 (numV-n (is-a? numV? (helper scr env))))
-                       (helper thn env)
-                       (helper els env))]
+                   (if (= 0 (numV-n (is-a? numV? (strict (helper scr env)))))
+                        (helper thn env)
+                        (helper els env))]
               [mt () [mtV]]
               ; Remember this is a by-need cons cell: It should not evaluate
               ; its head or tail unless you use strict on them /later/.
               ; TODO : Make this cons cell to work in a by-need fashion for the
               ;        infinite lists to work!
-              [cns (hd tl) (error " TODO: Must fix this!")]
+              [cns (hd tl)
+                   (cons (strict (helper hd env)) (helper tl env))]
               [match-A4L (matched-expr
                           cons-hd-id cons-tl-id body-cons
                           body-empty)
@@ -381,7 +387,7 @@
                                     (cnsV (strict hd)
                                           (strict tl))]
                               [else arg-val]))
-                            ]))]
+                          ]))]
     (helper expr (mtEnv))))
 
 ; TODO : Fill the implementation of a map function (you can use map as the name
@@ -394,13 +400,13 @@
 ;        of the function for recursive calls
 (define A4L-take-n
   (parse '{fun {n l}
-       {if0 n
-            empty ; n == 0 (base case)
-            {match l as ; n > 0 (recurse on tail)
-              {{cons hd tl}
-               =>
-               {strict {cons hd {take-n {- n 1} tl}}}}
-              {empty => empty}}}}))
+               {if0 n
+                    empty ; n == 0 (base case)
+                    {match l as ; n > 0 (recurse on tail)
+                      {{cons hd tl}
+                       =>
+                       {strict {cons hd {take-n {- n 1} tl}}}}
+                      {empty => empty}}}}))
 
 ; TODO : Fill the implementation of a drop-n function (you can use drop-n as the name
 ;        of the function for recursive calls
@@ -458,13 +464,13 @@
                   (not (cnsV? (cnsV-tl result))))))
 
 (test/pred (run '{withrec {list-gen {fun {n} {cons n {list-gen n}}}}
-                     {strict {list-gen {+ 5 5}}}})
-      (λ (result)
-        (and (cnsV? result)
-             (equal? (numV 10) (cnsV-hd result))
-             (cnsV? (cnsV-tl result))
-             (not (eq? (numV 10) (cnsV-hd (cnsV-tl result))))
-             (not (cnsV? (cnsV-tl (cnsV-tl result)))))))
+                          {strict {list-gen {+ 5 5}}}})
+           (λ (result)
+             (and (cnsV? result)
+                  (equal? (numV 10) (cnsV-hd result))
+                  (cnsV? (cnsV-tl result))
+                  (not (eq? (numV 10) (cnsV-hd (cnsV-tl result))))
+                  (not (cnsV? (cnsV-tl (cnsV-tl result)))))))
 ; with-rec
 (test (interp (desugar (parse '{withrecs {{triple {fun {x} {+ x {double x}}}}
                                           {double {fun {x} {+ x x}}}}
@@ -487,7 +493,7 @@
               {fact1 {fun {n} {if0 {- n 1} 1 {* n {fact2 {- n 1}}}}}}
               {fact0 {fun {n} {if0 {- n 1} 1 {* n {fact1 {- n 1}}}}}}
               {fact2 {fun {n} {if0 {- n 1} 1 {* n {fact {- n 1}}}}}}}
-              {fact 10}}) (numV 3628800))
+             {fact 10}}) (numV 3628800))
 
 ;; match
 (test (interp (desugar (parse '{match {cons 1 empty} as
@@ -501,7 +507,7 @@
 (test (interp (desugar (parse '{withrec {f {fun {x} {+ x 1}}}
                                         {match {cons 1 {cons 2 empty}} as
                                           {{cons hd tl} => {f hd}}
-                                           {empty => 0}}}))) (numV 2))
+                                          {empty => 0}}}))) (numV 2))
 
 (test/exn (interp (desugar (parse '{withrecs {{x y}
                                               {y x}}
@@ -588,15 +594,15 @@
  (interp
   (desugar
    (s-withrec 'take-n A4L-take-n
-   (parse
-    '{withrec {ones {cons 1 ones}}
-              {withrec
-               {add-cons
-                {fun {l}
-                     {match l as
-                       {{cons hd tl} => {+ hd {add-cons tl}}}
-                       {empty => 0}}}}
-               {add-cons {take-n 5 ones}}}})))) (numV 5))
+              (parse
+               '{withrec {ones {cons 1 ones}}
+                         {withrec
+                          {add-cons
+                           {fun {l}
+                                {match l as
+                                  {{cons hd tl} => {+ hd {add-cons tl}}}
+                                  {empty => 0}}}}
+                          {add-cons {take-n 5 ones}}}})))) (numV 5))
 
 
 (test/must-timeout
@@ -669,7 +675,7 @@
            (skip ,A4L-skip))
          (parse
           '{withrec {naturals {cons 0 {map {fun {x} {+ x 1}} naturals}}}      
-                           {strict {take-n 3 {skip naturals}}}}))))
+                    {strict {take-n 3 {skip naturals}}}}))))
       (cnsV (numV 0)
             (cnsV (numV 2)
                   (cnsV (numV 4) (mtV)))))
@@ -683,7 +689,7 @@
            (skip ,A4L-skip))
          (parse
           '{withrec {naturals {cons 0 {map {fun {x} {+ x 1}} naturals}}}      
-                           {strict {take-n 3 {drop-n 6 {skip naturals}}}}}))))
+                    {strict {take-n 3 {drop-n 6 {skip naturals}}}}}))))
       (cnsV (numV 12)
             (cnsV (numV 14)
                   (cnsV (numV 16) (mtV)))))

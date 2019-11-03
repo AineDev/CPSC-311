@@ -342,7 +342,9 @@
               [cns (hd tl)
                    (cnsV (thunkV hd env (box false)) (thunkV tl env (box false)))]
               [match-A4L (matched-expr
-                          cons-hd-id cons-tl-id body-cons
+                          cons-hd-id
+                          cons-tl-id
+                          body-cons
                           body-empty)
                          ; Evaluate matched expression in our language
                          (type-case Value (strict (helper matched-expr env))
@@ -353,6 +355,8 @@
                                                 (anEnv cons-tl-id tl-contents
                                                        env)))]
                            ; TODO : Fix the missing case here!
+                           ; Finish the implementation of match so it appropriately deals with the empty case.
+                           [mtV () (strict (helper body-empty env))]
                            [else (error 'interp
                                         "Attempted to match a non-list value")])]
               

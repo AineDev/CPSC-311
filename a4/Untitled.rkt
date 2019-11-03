@@ -122,8 +122,8 @@
              (body-empty A4L?)]
   [withrec (name symbol?) (named-expr A4L?) (body A4L?)]
   [withrecs (defns (listof (list/c symbol? A4L?))) (body A4L?)]
-  [fun (param symbol?) (body A4L?)]
-  [app (fun-expr A4L?) (arg-expr A4L?)]
+  [fun (param symbol?) (body A4L?)] ;(s-fun (listof symbol) (A4L)) -> (fun (symbol) (A4L))
+  [app (fun-expr A4L?) (arg-expr A4L?)] ; (s-app (listof A4L) (A4L)) -> (app (A4L) (A4L))
   [id (name symbol?)]
   [strict-A4L (arg A4L?)])
 
@@ -339,7 +339,8 @@
               ; its head or tail unless you use strict on them /later/.
               ; TODO : Make this cons cell to work in a by-need fashion for the
               ;        infinite lists to work!
-              [cns (hd tl) (error " TODO: Must fix this!")]
+              [cns (hd tl)
+                   (cnsV (thunkV hd env (box false)) (thunkV tl env (box false)))]
               [match-A4L (matched-expr
                           cons-hd-id cons-tl-id body-cons
                           body-empty)

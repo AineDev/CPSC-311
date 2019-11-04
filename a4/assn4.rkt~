@@ -313,11 +313,10 @@
           ;; definitions being simultaneously defined.
           (define (mutually-cyclically-bind-and-interp decls env)
             ; TODO : Implement this definition
-            (local ([define env-2 (cyclically-bind-and-interp (first (first decls)) (first (second decls)) env)])
-              ;base case?
-              (cond [(empty? decls) env]
-                    [else
-                     (mutually-cyclically-bind-and-interp (rest decls) env-2)])))
+            (foldl
+             (λ (args rnc) (cyclically-bind-and-interp (first args) (second args) rnc))
+             env
+             decls))
               
           ; helper : A4L Env -> Value  
           (define (helper expr env)
@@ -356,7 +355,7 @@
                                                        env)))]
                            ; TODO : Fix the missing case here!
                            ; Finish the implementation of match so it appropriately deals with the empty case.
-                           [mtV () (numV 0)]
+                           [mtV () (helper body-empty env)]
                            [else (error 'interp
                                         "Attempted to match a non-list value")])]
               

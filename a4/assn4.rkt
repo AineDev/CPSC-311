@@ -200,14 +200,13 @@
     ;TODO: Fix the following incorrect desugaring for multiple arguments here.
     ;      It must be compatible with the desugaring that we have provided
     ;      For functions in the line before
-    [s-app (fn definitions)
+    [s-app (fn args)
            (foldl (lambda (frst; value
                            rslt; rest of natural recursion
                            ) (app rslt
-                              (desugar frst))) ; how to put them together
+                                  (desugar frst))) ; how to put them together
                   (desugar fn)
-                  definitions)]
-                                   
+                  args)]    
     ; (fun-exp s-A4L?) (arg-expr (lambda (x) (andmap s-A4L? x))) ; s-app format (s-app (s-A4L) (listof s-A4L))
     ; [app (fun-expr A4L?) (arg-expr A4L?)]                      ; app format (app (A4L) (app (A4L) (app (A4L) (A4L))))
     ; (app (desugar f) (desugar (last a)))                       ; original 
@@ -313,11 +312,10 @@
           ;; definitions being simultaneously defined.
           (define (mutually-cyclically-bind-and-interp decls env)
             ; TODO : Implement this definition
-            (local ([define env-2 (cyclically-bind-and-interp (first (first decls)) (first (second decls)) env)])
-              ;base case?
-              (cond [(empty? decls) env]
-                    [else
-                     (mutually-cyclically-bind-and-interp (rest decls) env-2)])))
+            (foldr
+             (λ (args rnc) (cyclically-bind-and-interp (first args) (second args) rnc))
+             env ;(map (λ (x) (aRecEnv (first x) (box false) env)) decls)
+             decls))
               
           ; helper : A4L Env -> Value  
           (define (helper expr env)
@@ -332,8 +330,8 @@
               ;                      that would make this work?
               [if0 (scr thn els)
                    (if (= 0 (numV-n (is-a? numV? (strict (helper scr env)))))
-                        (helper thn env)
-                        (helper els env))]
+                       (helper thn env)
+                       (helper els env))]
               [mt () [mtV]]
               ; Remember this is a by-need cons cell: It should not evaluate
               ; its head or tail unless you use strict on them /later/.
@@ -356,7 +354,7 @@
                                                        env)))]
                            ; TODO : Fix the missing case here!
                            ; Finish the implementation of match so it appropriately deals with the empty case.
-                           [mtV () (strict (helper body-empty env))]
+                           [mtV () (helper body-empty env)]
                            [else (error 'interp
                                         "Attempted to match a non-list value")])]
               
@@ -398,7 +396,9 @@
 ;        of the function for recursive calls
 (define A4L-map
   (parse '{fun {f l}
-               TODO-fixme}))
+               {match l as
+                 {{cons hd tl} => {cons {strict {f hd}} {map f tl}}}
+                 {empty => empty}}}))
 
 ; TODO : Fill the implementation of a take-n function (you can use take-n as the name
 ;        of the function for recursive calls
@@ -416,7 +416,13 @@
 ;        of the function for recursive calls
 (define A4L-drop-n
   (parse '{fun {n l}
-               TODO-fixme}))
+               {if0 n
+                    l
+                    {match l as ; n > 0 (recurse on tail)
+                      {{cons hd tl}
+                       =>
+                       {strict {drop-n {- n 1} tl}}}
+                      {empty => empty}}}}))
 
 ; TODO : Fill the implementation of a skip function (you can use skip as the name
 ;        of the function for recursive calls
@@ -424,7 +430,13 @@
 (define A4L-skip
   (parse
    '{fun {l}
-         TODO-fixme}))
+         {match l as 
+           {{cons hd tl}
+            =>
+            {match tl as
+              {{cons snd rst} => {cons hd {skip rst}}}
+              {empty => empty}}}
+           {empty => empty}}}))
                         
 ; Tests
 

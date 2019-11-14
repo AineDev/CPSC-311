@@ -316,7 +316,12 @@
              (λ (args rnc) (cyclically-bind-and-interp (first args) (second args) rnc))
              env ;(map (λ (x) (aRecEnv (first x) (box false) env)) decls)
              decls))
-              
+
+          ;build a new environment and
+          ; put a box in that environment for each fn
+          ; i went through that environment and set each box accordingly
+          ; built a helper for this function that would lookup and return the box i was looking for). all in a local.
+          
           ; helper : A4L Env -> Value  
           (define (helper expr env)
             (type-case A4L expr

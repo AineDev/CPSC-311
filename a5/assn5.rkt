@@ -262,6 +262,7 @@
     
     [s-err (m args) (err m (map desugar args))]
     ))
+
 (define (desugar-object fields methods)
   (local ([define (desugar-method m)
             (s-fun (cons 'self (s-method-params m))
@@ -287,15 +288,28 @@
 ;;         delegation of methods, discussed in lecture 23, and on
 ;;         https://users.dcc.uchile.cl/~etanter/ooplai/Forwarding_and_Delegation.html
 
+; s-object-del (parent s-A5L) (fields (listof s-field)) (methods (listof s-method)) -> [s-fun (ids b) (foldr (lambda (x acc) (fun x acc)) (desugar b) ids)]
 (define (desugar-object-del parent fields methods)
+  ;(desugar-object fields methods)
   (local ([define (desugar-method m)
             (s-fun (cons 'self (s-method-params m))
                    (s-method-body m))]
           [define dynamic-dispatcher
             (s-fun (list 'method)
-                   (s-err "Message not understood" '()))])
+                   (foldr (λ (method dispatcher-rest-acc)
+                            (s-if (s-= (s-id 'method)
+                                       (s-str (symbol->string (s-method-name method))))
+                                  (desugar-method method)
+                                  dispatcher-rest-acc))
+                          (s-app parent (list (s-id 'method)))
+                          methods))])
     (desugar
-     dynamic-dispatcher)))
+     (foldr (λ (field desugared-object-acc)
+              (s-withrec (s-field-name field)
+                         (s-field-value field)
+                         desugared-object-acc))
+            dynamic-dispatcher
+            fields))))
 
 ;; NOTE:  YOU MUST NOT CHANGE THIS DEFINE-TYPE
 (define-type Value
@@ -453,7 +467,7 @@
              {{field func f}}
              {{method twice {x} {func {func x}}}
               ;; Fix the following method:
-              {method four-times {x} {twice {twice x}}}}}})
+              {method four-times {x} {-> self twice {-> self twice x}}}}}})
 
 ;; -----
 ;; Lists
@@ -479,8 +493,7 @@
                 {field tl t}}
                {{method head {} hd}
                 {method tail {} tl}
-                ;; Put `is-empty?' here!
-                
+                {method is-empty? {} false}
                 }}})
 
 (define A5L-empty
@@ -488,8 +501,7 @@
            ;; We show an error message if we try to get the head or tail of `empty'.
            {{method head {} {error "Trying to get the head of an empty list."}}
             {method tail {} {error "Trying to get the tail of an empty list."}}
-            ;; Put `is-empty?' here!
-            
+            {method is-empty? {} true}
             }})
 
 ;; TODO-5:
@@ -497,14 +509,20 @@
 ;; You can use `cons' and `empty' in your code
 (define A5L-map
   '{fun {f l}
-        TODO})
+        {if {-> l is-empty?}
+            empty
+            {cons {f {-> l head}} {map f {-> l tail}}}}})
 
 ;; TODO-6:
 ;; Write the `take' function for our list
 ;; You can use `cons' and `empty' in your code
 (define A5L-take
   '{fun {n l}
-        TODO})
+        {if {-> l is-empty?}
+            empty
+            {if {= n 0}
+                empty
+                {cons {-> l head} {take {- n 1} {-> l tail}}}}}})
 
 ;; With the `map' function, we can map over a list by calling
 ;; {map some-function some-list}
@@ -532,11 +550,20 @@
 
 ;; You can use `m-cons' and `m-empty',
 ;; as well as the normal `cons' and `empty' in your code.
+
 (define A5L-m-cons
-  '{fun {h t} 'TODO})
+  '{fun {h t} {OBJECT-DEL
+               {cons h t}
+               {}
+               {{method map {f}
+                        {cons {f h} {-> t map f}}}}}})
+
 
 (define A5L-m-empty
-  'TODO)
+  '{OBJECT-DEL
+    empty; needs to be an instance of an object
+    {}
+    {{method map {f} empty}}})
 
 ;; ----
 ;; Infinity (revisited)
@@ -550,7 +577,10 @@
 
 ;; HINT: `cons' and `empty' are not used here, but `self' is.
 (define A5L-ones
-  'TODO)
+        '{OBJECT {{field hd 1}}
+                {{method head {} hd}
+                 {method tail {} self}
+                 {method is-empty? {} false}}})
 
 ;; TODO-9:
 ;; Define the `iterate' function, that takes a function and an initial value as arguments,
@@ -568,7 +598,11 @@
 
 ;; You can use `iterate' in your code.
 (define A5L-iterate
-  '{fun {f i} TODO})
+  '{fun {f i}
+        {OBJECT {{field hd i}}
+                {{method head {} hd}
+                 {method tail {} {iterate f {f hd}}}
+                 {method is-empty? {} false}}}})
 
 ;; TODO-10:
 ;; The `map' we have defined previously is eager.
@@ -578,7 +612,7 @@
 ;; In order to map over an infinite list, we need to implement map in another way.
 ;; Remember that lists are just objects that have a certain set of methods,
 ;; and that map returns a list...
-;; which means, lazy-map can just return an object with the three method required,
+;; which means, lazy-map can just return an object with the three method required, ; what does "the three method required" mean?
 ;; and it would be a list!
 
 ;; Here is a partial implementation of `lazy-map',
@@ -596,8 +630,8 @@
             ;; first element in the list
             {OBJECT {} ;; Feel free to add fields if you think they are needed
                     {{method is-empty? {} false}
-                     {method head {} TODO}
-                     {method tail {} TODO}}}}})
+                     {method head {} {f {-> l head}}}
+                     {method tail {} {lazy-map f {-> l tail}}}}}}})
 
 ;; -----------------------------------------------------------------------------
 ;; TESTS
@@ -624,8 +658,8 @@
             (fun
              'a
              (binop +
-              (app (app (id 'self) (str "x?")) (id 'self))
-              (id 'a))))
+                    (app (app (id 'self) (str "x?")) (id 'self))
+                    (id 'a))))
            (err "Message not understood" '())))))))
 
 ;; Just basic method calls

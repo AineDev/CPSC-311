@@ -31,7 +31,7 @@ Signed: Aine Kearns
 
 Please fill in each of the following:
 
-Acknowledgment of assistance (per the collab policy!): TODO
+Acknowledgment of assistance (per the collab policy!): Maja Evans, Lilli
 
 For teams, rough breakdown of work: TODO (no more than a paragraph
 needed!)

@@ -524,13 +524,14 @@
 
               ; TODO 1 : Fix the implementation of this case.
               [fun (arg-name body)
-                   ;(k
+                   (k
                     (closureV (lambda (argv store-f stdout-f threads-f proms-f caller/k)
-                                  (helper/k body (anEnv arg-name argv env) store stdout threads proms k)))
-                      ;store
-                      ;stdout
-                      ;threads
-                      ;proms)
+                                  (helper/k body (anEnv arg-name argv env) store-f stdout-f threads-f proms-f caller/k)))
+                      store
+                      stdout
+                      threads
+                      proms
+                      )
                     ]
 
               [app (f a)
@@ -707,7 +708,9 @@
 (define (run-for-print sexp)
   (interp/k (desugar (parse sexp)) (mtEnv) (mtStore) ""
             (lambda args
-              (first args))))
+              ;(map (lambda (l) (string-append l r)) "" (rest args))) 
+              (first args)
+              ))
 
 
 (test (let/cc k (interp/k (id 'x) (anEnv 'x (numV 10) (mtEnv)) (mtStore) "" (lambda (v s sr th pr) (k v))))

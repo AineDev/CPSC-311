@@ -9,32 +9,31 @@ READMEs.
 
 ===================== HEADER ========================
 
-Student #1, Name: TODO
-Student #1, students.cs.ubc.ca Login: TODO
-Student #1, Student Number: TODO
+Student #1, Name: Aine Kearns
+Student #1, students.cs.ubc.ca Login: ainedev (f0a0b)
+Student #1, Student Number: 45402147
 
-Student #2, Name: TODO (or write "NONE")
-Student #2, students.cs.ubc.ca Login: TODO (or write "NONE")
-Student #2, Student Number: TODO (or write "NONE")
+Student #2, Name: NONE
+Student #2, students.cs.ubc.ca Login: NONE
+Student #2, Student Number: NONE
 
 (If you decide to do the assignment as a project group, add ALL the members of the group following this format)
 
-Team name (for fun!): TODO
+Team name (for fun!): Motivated Monkeys
 
 Acknowledgment that you understand and have followed the course's
 collaboration policy (READ IT at
 https://www.students.cs.ubc.ca/~cs-311/current/syllabus.html#collaboration-policy-for-assignments):
 
-Signed: TODO (put your names here again as a signature)
+Signed: Aine Kearns
 
 ===================== LOGISTICS =====================
 
 Please fill in each of the following:
 
-Acknowledgment of assistance (per the collab policy!): TODO
+Acknowledgment of assistance (per the collab policy!): N/A
 
-For teams, rough breakdown of work: TODO (no more than a paragraph
-needed!)
+For teams, rough breakdown of work: N/A
 
 ======================= BONUS =======================
 

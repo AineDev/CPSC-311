@@ -429,7 +429,7 @@
 
 (define (do-once-promise-is-resolved promise-id k)
   (local ([define (computation-helper promise-id)
-            (λ (_ store stdout threads resolved-promises)
+            (Î» (_ store stdout threads resolved-promises)
               (let [(promise-value (lookup-promise-value promise-id resolved-promises))]
                 (if promise-value
                     (type-case D-PLE-value promise-value
@@ -455,7 +455,7 @@
 
 (define (resolve-promise-and-continue promise-id)
   ;; We are returning a lambda (a ContFun!)
-  (λ (resolved-value store-rv stdout-rv threads-rv proms-rv)
+  (Î» (resolved-value store-rv stdout-rv threads-rv proms-rv)
     ; Once the promise value is computed, we actually just need to update the promise values:
     (let ([resolved-proms (resolvedPromise promise-id resolved-value proms-rv)])
       ; and we can context switch to do the next computation pending:
@@ -524,14 +524,12 @@
 
               ; TODO 1 : Fix the implementation of this case.
               [fun (arg-name body)
-                   ;(k
-                    (closureV (lambda (argv store-f stdout-f threads-f proms-f caller/k)
+                   (k (closureV (lambda (argv store-f stdout-f threads-f proms-f caller/k)
                                   (helper/k body (anEnv arg-name argv env) store stdout threads proms k)))
-                      ;store
-                      ;stdout
-                      ;threads
-                      ;proms)
-                    ]
+                      store
+                      stdout
+                      threads
+                      proms)]
 
               [app (f a)
                    (helper/k f env store stdout threads proms
@@ -584,7 +582,7 @@
                        (let* ([promise-id (next-promise-id)]
                               [promise-contents
                                ;; The promise itself will compute expr later:
-                               (λ (_ current-store current-stdout current-threads current-proms)
+                               (Î» (_ current-store current-stdout current-threads current-proms)
                                  (helper/k expr env current-store current-stdout current-threads current-proms
                                            (resolve-promise-and-continue promise-id)))])
                          (k (promiseV promise-id) store stdout (schedule-computation-for-later promise-contents threads) proms))]
@@ -603,14 +601,14 @@
                (promise-before after-callback)
                (helper/k
                 promise-before env store stdout threads proms
-                (λ (promise-v store-p stdout-p threads-p proms-p)
+                (Î» (promise-v store-p stdout-p threads-p proms-p)
                   ; At this point, we check that promise-v is an actual promise:
                   (type-case D-PLE-value promise-v
                     [promiseV
                      (promise-id)
                      (helper/k
                       after-callback env store-p stdout-p threads-p proms-p
-                      (λ (callback-v store-thn stdout-thn threads-thn proms-thn)
+                      (Î» (callback-v store-thn stdout-thn threads-thn proms-thn)
                         (type-case D-PLE-value callback-v
                           [closureV
                            (proc)
@@ -618,7 +616,7 @@
                            (local ([define after-promise-id (next-promise-id)]
                                    [define after-behaviour
                                      ;; This continuation value will be called once the previous promise is done:
-                                     (λ (previous-value current-store current-stdout current-threads current-proms)
+                                     (Î» (previous-value current-store current-stdout current-threads current-proms)
                                        (proc previous-value current-store current-stdout current-threads current-proms
                                              (resolve-promise-and-continue after-promise-id)))]
                                    )
@@ -631,13 +629,13 @@
               [all (a b)
                    (helper/k
                     a env store stdout threads proms
-                    (λ (promise-a store-a stdout-a threads-a proms-a)
+                    (Î» (promise-a store-a stdout-a threads-a proms-a)
                       (type-case D-PLE-value promise-a
                         [promiseV
                          (promise-a-id)
                          (helper/k
                           b env store-a stdout-a threads-a proms-a
-                          (λ (promise-b store-b stdout-b threads-b proms-b)
+                          (Î» (promise-b store-b stdout-b threads-b proms-b)
                             (type-case D-PLE-value promise-b
                               [promiseV
                                (promise-b-id)
@@ -650,13 +648,13 @@
                (a b)
                (helper/k
                 a env store stdout threads proms
-                (λ (promise-a store-a stdout-a threads-a proms-a)
+                (Î» (promise-a store-a stdout-a threads-a proms-a)
                   (type-case D-PLE-value promise-a
                     [promiseV
                      (promise-a-id)
                      (helper/k
                       b env store-a stdout-a threads-a proms-a
-                      (λ (promise-b store-b stdout-b threads-b proms-b)
+                      (Î» (promise-b store-b stdout-b threads-b proms-b)
                         (type-case D-PLE-value promise-b
                           [promiseV (promise-b-id)
                                     (let* ([race-promise-id (next-promise-id)]
@@ -679,7 +677,7 @@
                          (k (voidV) store (string-append stdout to-print) threads proms)]
               [resolved (p)
                         (helper/k p env store stdout threads proms
-                                  (λ (promise-v store-p stdout-p threads-p proms-p)
+                                  (Î» (promise-v store-p stdout-p threads-p proms-p)
                                     (type-case D-PLE-value promise-v
                                       [promiseV (promise-id)
                                                 (context-switch (voidV) store-p stdout-p

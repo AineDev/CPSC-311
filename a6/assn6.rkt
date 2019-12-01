@@ -526,13 +526,13 @@
               [fun (arg-name body)
                    (k
                     (closureV (lambda (argv store-f stdout-f threads-f proms-f caller/k)
-                                  (helper/k body (anEnv arg-name argv env) store-f stdout-f threads-f proms-f caller/k)))
-                      store
-                      stdout
-                      threads
-                      proms
-                      )
-                    ]
+                                (helper/k body (anEnv arg-name argv env) store-f stdout-f threads-f proms-f caller/k)))
+                    store
+                    stdout
+                    threads
+                    proms
+                    )
+                   ]
 
               [app (f a)
                    (helper/k f env store stdout threads proms
@@ -607,26 +607,25 @@
                 (λ (promise-v store-p stdout-p threads-p proms-p)
                   ; At this point, we check that promise-v is an actual promise:
                   (type-case D-PLE-value promise-v
-                    [promiseV
-                     (promise-id)
-                     (helper/k
-                      after-callback env store-p stdout-p threads-p proms-p
-                      (λ (callback-v store-thn stdout-thn threads-thn proms-thn)
-                        (type-case D-PLE-value callback-v
-                          [closureV
-                           (proc)
-                           ;; We can now create the promise for after
-                           (local ([define after-promise-id (next-promise-id)]
-                                   [define after-behaviour
-                                     ;; This continuation value will be called once the previous promise is done:
-                                     (λ (previous-value current-store current-stdout current-threads current-proms)
-                                       (proc previous-value current-store current-stdout current-threads current-proms
-                                             (resolve-promise-and-continue after-promise-id)))]
-                                   )
-                             ;; We now must do the first scheduling!
-                             (k (promiseV after-promise-id) store-thn stdout-thn threads-thn
-                                proms-thn))]
-                          [else (error "Then should be a procedure")])))] ;))
+                    [promiseV (promise-id)
+                              (helper/k
+                               after-callback env store-p stdout-p threads-p proms-p
+                               (λ (callback-v store-thn stdout-thn threads-thn proms-thn)
+                                 (type-case D-PLE-value callback-v
+                                   [closureV
+                                    (proc)
+                                    ;; We can now create the promise for after
+                                    (local ([define after-promise-id (next-promise-id)]
+                                            [define after-behaviour
+                                              ;; This continuation value will be called once the previous promise is done:
+                                              (λ (previous-value current-store current-stdout current-threads current-proms)
+                                                (proc previous-value current-store current-stdout current-threads current-proms
+                                                      (resolve-promise-and-continue after-promise-id)))]
+                                            )
+                                      ;; We now must do the first scheduling!
+                                      (k (promiseV after-promise-id) store-thn stdout-thn threads-thn
+                                         proms-thn))]
+                                   [else (error "Then should be a procedure")])))] ;))
                     [else (error "after only works with a promise on first arg")])))]
               ;; TODO 4 : Implement "all".  We only provide you with a very minimal stub that does not have the appropriate behaviour.
               [all (a b)
@@ -643,8 +642,8 @@
                               [promiseV
                                (promise-b-id)
                                (k (consV promise-a-id (consV promise-b-id (mtV))) store-b stdout-b
-                                    threads-b
-                                    proms-b)]
+                                  threads-b
+                                  proms-b)]
                               [else (error "all must take only promises")])))]
                         [else (error "all must take only promises")])))]
               [race
@@ -708,9 +707,8 @@
 (define (run-for-print sexp)
   (interp/k (desugar (parse sexp)) (mtEnv) (mtStore) ""
             (lambda args
-              ;(map (lambda (l) (string-append l r)) "" (rest args))) 
-              (first args)
-              ))
+              (third args)
+              )))
 
 
 (test (let/cc k (interp/k (id 'x) (anEnv 'x (numV 10) (mtEnv)) (mtStore) "" (lambda (v s sr th pr) (k v))))
@@ -929,9 +927,9 @@
       (consV (numV 5) (consV (numV 9) (mtV))))
 
 (test/pred (run '{with {a {promise {seqn {print-out "a"} {seqn {yield} 5}}}}
-                  {with {b {promise {seqn {print-out "giraffe"} 9}}}
-                        {all a b}}})
-      promiseV?)
+                       {with {b {promise {seqn {print-out "giraffe"} 9}}}
+                             {all a b}}})
+           promiseV?)
 
 (test (run-for-print '{with {a {promise {seqn {print-out "a"} {seqn {yield} 5}}}}
                             {with {b {promise {seqn {print-out "giraffe"} 9}}}
@@ -950,10 +948,10 @@
       (numV 5))
 
 (test/pred (run '{with {a {promise {seqn {print-out "a"} 5}}}
-                  {with {b {promise {seqn {print-out "giraffe"} {seqn {yield} 9}}}}
-                        {race a b}}})
+                       {with {b {promise {seqn {print-out "giraffe"} {seqn {yield} 9}}}}
+                             {race a b}}})
            promiseV?)
 (test (run-for-print '{with {a {promise {seqn {print-out "a"} 5}}}
                             {with {b {promise {seqn {print-out "giraffe"} {seqn {yield} 9}}}}
                                   {race a b}}})
-           "")
+      "")

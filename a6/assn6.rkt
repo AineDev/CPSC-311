@@ -608,24 +608,27 @@
                   ; At this point, we check that promise-v is an actual promise:
                   (type-case D-PLE-value promise-v
                     [promiseV (promise-id)
-                              (helper/k
-                               after-callback env store-p stdout-p threads-p proms-p
-                               (λ (callback-v store-thn stdout-thn threads-thn proms-thn)
-                                 (type-case D-PLE-value callback-v
-                                   [closureV
-                                    (proc)
-                                    ;; We can now create the promise for after
-                                    (local ([define after-promise-id (next-promise-id)]
-                                            [define after-behaviour
-                                              ;; This continuation value will be called once the previous promise is done:
-                                              (λ (previous-value current-store current-stdout current-threads current-proms)
-                                                (proc previous-value current-store current-stdout current-threads current-proms
-                                                      (resolve-promise-and-continue after-promise-id)))]
-                                            )
-                                      ;; We now must do the first scheduling!
-                                      (k (promiseV after-promise-id) store-thn stdout-thn threads-thn
-                                         proms-thn))]
-                                   [else (error "Then should be a procedure")])))] ;))
+                              (helper/k after-callback env store-p stdout-p threads-p proms-p
+                                        (λ (callback-v store-thn stdout-thn threads-thn proms-thn)
+                                          (type-case D-PLE-value callback-v
+                                            [closureV (proc)
+                                                      ;; We can now create the promise for after
+                                                      (local ([define after-promise-id (next-promise-id)]
+                                                              [define after-behaviour
+                                                                ;; This continuation value will be called once the previous promise is done:
+                                                                (λ (previous-value current-store current-stdout current-threads current-proms)
+                                                                  (proc previous-value current-store current-stdout current-threads current-proms
+                                                                        (resolve-promise-and-continue after-promise-id)))]
+                                                              )
+                                                        ;; We now must do the first scheduling!
+                                                        (k (promiseV after-promise-id)
+                                                           store-thn
+                                                           stdout-thn
+
+                                                           (schedule-computation-for-later (do-once-promise-is-resolved promise-id after-behaviour)
+                                                                                           threads-thn)
+                                                           proms-thn))]
+                                            [else (error "Then should be a procedure")])))]
                     [else (error "after only works with a promise on first arg")])))]
               ;; TODO 4 : Implement "all".  We only provide you with a very minimal stub that does not have the appropriate behaviour.
               [all (a b)

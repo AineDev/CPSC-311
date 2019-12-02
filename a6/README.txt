@@ -13,9 +13,9 @@ Student #1, Name: Aine Kearns
 Student #1, students.cs.ubc.ca Login: ainedev (f0a0b)
 Student #1, Student Number: 45402147
 
-Student #2, Name: NONE
-Student #2, students.cs.ubc.ca Login: NONE
-Student #2, Student Number: NONE
+Student #2, Name: Shannon Hogen
+Student #2, students.cs.ubc.ca Login: shogen2
+Student #2, Student Number: 21707112
 
 (If you decide to do the assignment as a project group, add ALL the members of the group following this format)
 
@@ -31,9 +31,9 @@ Signed: Aine Kearns
 
 Please fill in each of the following:
 
-Acknowledgment of assistance (per the collab policy!): N/A
+Acknowledgment of assistance (per the collab policy!): Laura Schmid, Kaeli Flanagan
 
-For teams, rough breakdown of work: N/A
+For teams, rough breakdown of work: Did work separately and compiled responses
 
 ======================= BONUS =======================
 
